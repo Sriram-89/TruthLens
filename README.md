@@ -1,4 +1,4 @@
-# TruthLens Backend — v3
+# TruthLens Backend 
 
 Production-ready backend for TruthLens: India's independent blogging, news, and discussions platform.
 
