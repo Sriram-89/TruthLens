@@ -12,7 +12,7 @@ import { useState, useEffect, useContext, createContext, useCallback, useRef, us
 // §1  CONSTANTS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const API_BASE = "http://localhost:5000/api/v1";
+const API_BASE = "https://truthlens-559z.onrender.com";
 
 const C = {
   primary:    "#0f172a", primaryL: "#1e293b",
