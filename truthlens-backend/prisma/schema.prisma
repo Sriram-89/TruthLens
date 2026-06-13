@@ -1,0 +1,426 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  READER
+  BLOGGER
+  ADMIN
+}
+
+enum BlogStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  FLAGGED
+}
+
+enum ModerationStatus {
+  CLEAN
+  FLAGGED
+  REVIEWED
+  REMOVED
+}
+
+enum Category {
+  NATIONAL
+  HISTORY
+  POLITICS
+  TECHNOLOGY
+  SCIENCE
+  EDUCATION
+  SPORTS
+  HEALTH
+  TRAVEL
+  ENTERTAINMENT
+}
+
+enum Country {
+  INDIA
+  USA
+  UK
+  CANADA
+  AUSTRALIA
+  OTHER
+}
+
+enum NotificationType {
+  NEW_COMMENT
+  NEW_LIKE
+  NEW_FOLLOWER
+  IDENTITY_REQUEST
+  IDENTITY_ACCEPTED
+  IDENTITY_REJECTED
+  BLOG_PUBLISHED
+  BLOG_FLAGGED
+  BLOG_REPORTED
+}
+
+enum IdentityRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum ReportReason {
+  HATE_SPEECH
+  HARASSMENT
+  MISINFORMATION
+  EXPLICIT_CONTENT
+  SPAM
+  OTHER
+}
+
+// ─── User ────────────────────────────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String?
+  googleId        String?   @unique
+  role            Role      @default(BLOGGER)
+  name            String
+  bio             String?
+  avatarUrl       String?
+  cloudinaryId    String?
+  website         String?
+  twitterHandle   String?
+  isAnonymous     Boolean   @default(false)
+  anonymousName   String?
+  isVerified      Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime?
+
+  blogs           Blog[]
+  comments        Comment[]
+  likes           Like[]
+  bookmarks       Bookmark[]
+  notifications   Notification[]
+  sentRequests    IdentityRequest[] @relation("Requester")
+  receivedRequests IdentityRequest[] @relation("Target")
+  reports         Report[]
+  following       Follow[]    @relation("Follower")
+  followers       Follow[]    @relation("Following")
+  refreshTokens   RefreshToken[]
+  discussions       Discussion[]      @relation("DiscussionAuthor")
+  discussionReplies DiscussionReply[] @relation("ReplyAuthor")
+  readingProgresses ReadingProgress[]
+
+  @@index([email])
+  @@index([googleId])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+}
+
+// ─── Follow ──────────────────────────────────────────────────────────────────
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower    User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+// ─── Blog ─────────────────────────────────────────────────────────────────────
+
+model Blog {
+  id               String           @id @default(cuid())
+  title            String
+  slug             String           @unique
+  excerpt          String?
+  content          String           @db.Text
+  coverImageUrl    String?
+  coverCloudId     String?
+  category         Category
+  subcategory      String?
+  country          Country          @default(INDIA)
+  tags             String[]
+  status           BlogStatus       @default(DRAFT)
+  moderationStatus ModerationStatus @default(CLEAN)
+  moderationNote   String?
+  isAnonymous      Boolean          @default(false)
+  readTime         Int              @default(1)
+  viewCount        Int              @default(0)
+  shareCount       Int              @default(0)
+  trendingScore    Float            @default(0)
+  publishedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  sources   Source[]
+  media     BlogMedia[]
+  comments  Comment[]
+  likes     Like[]
+  bookmarks Bookmark[]
+  reports   Report[]
+  readingProgress ReadingProgress[]
+
+  @@index([authorId])
+  @@index([category])
+  @@index([status])
+  @@index([trendingScore])
+  @@index([publishedAt])
+  @@index([slug])
+}
+
+// ─── Source ───────────────────────────────────────────────────────────────────
+
+model Source {
+  id        String   @id @default(cuid())
+  blogId    String
+  blog      Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  title     String
+  url       String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([blogId])
+}
+
+// ─── BlogMedia ────────────────────────────────────────────────────────────────
+
+model BlogMedia {
+  id           String   @id @default(cuid())
+  blogId       String
+  blog         Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  url          String
+  cloudinaryId String
+  type         String   // "image" | "video"
+  caption      String?
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([blogId])
+}
+
+// ─── Comment ──────────────────────────────────────────────────────────────────
+
+model Comment {
+  id        String    @id @default(cuid())
+  blogId    String
+  blog      Blog      @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String    @db.Text
+  parentId  String?
+  parent    Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies   Comment[] @relation("Replies")
+  isEdited  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([blogId])
+  @@index([authorId])
+  @@index([parentId])
+}
+
+// ─── Like ─────────────────────────────────────────────────────────────────────
+
+model Like {
+  id        String   @id @default(cuid())
+  blogId    String
+  blog      Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blogId, userId])
+  @@index([blogId])
+  @@index([userId])
+}
+
+// ─── Bookmark ─────────────────────────────────────────────────────────────────
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  blogId    String
+  blog      Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blogId, userId])
+  @@index([userId])
+}
+
+// ─── Notification ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  message    String
+  resourceId String?
+  isRead     Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+// ─── IdentityRequest ──────────────────────────────────────────────────────────
+
+model IdentityRequest {
+  id          String                @id @default(cuid())
+  requesterId String
+  requester   User                  @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  targetId    String
+  target      User                  @relation("Target", fields: [targetId], references: [id], onDelete: Cascade)
+  blogId      String?
+  message     String?
+  status      IdentityRequestStatus @default(PENDING)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@unique([requesterId, targetId, blogId])
+  @@index([targetId])
+  @@index([requesterId])
+}
+
+// ─── Report ───────────────────────────────────────────────────────────────────
+
+model Report {
+  id          String       @id @default(cuid())
+  blogId      String
+  blog        Blog         @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  reporterId  String
+  reporter    User         @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reason      ReportReason
+  description String?
+  isReviewed  Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  @@unique([blogId, reporterId])
+  @@index([blogId])
+  @@index([isReviewed])
+}
+
+// ─── Discussion (Phase 3) ─────────────────────────────────────────────────────
+
+enum DiscussionCategory {
+  TECHNOLOGY
+  CRIME
+  POLITICS
+  EDUCATION
+  SPORTS
+  SCIENCE
+  GENERAL
+}
+
+model Discussion {
+  id          String             @id @default(cuid())
+  title       String
+  body        String             @db.Text
+  category    DiscussionCategory @default(GENERAL)
+  authorId    String
+  author      User               @relation("DiscussionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  isOpen      Boolean            @default(true)
+  viewCount   Int                @default(0)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  replies     DiscussionReply[]
+
+  @@index([authorId])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model DiscussionReply {
+  id           String     @id @default(cuid())
+  discussionId String
+  discussion   Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User       @relation("ReplyAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  content      String     @db.Text
+  parentId     String?
+  parent       DiscussionReply?  @relation("NestedReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  children     DiscussionReply[] @relation("NestedReplies")
+  isEdited     Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([discussionId])
+  @@index([authorId])
+}
+
+// ─── News (Phase 4) ───────────────────────────────────────────────────────────
+
+enum NewsCategory {
+  LOCAL
+  NATIONAL
+  INTERNATIONAL
+  TECHNOLOGY
+  CRIME
+  POLITICS
+  SPORTS
+  ENTERTAINMENT
+  SCIENCE
+  HEALTH
+}
+
+model News {
+  id          String       @id @default(cuid())
+  headline    String
+  summary     String       @db.Text
+  content     String?      @db.Text
+  imageUrl    String?
+  sourceUrl   String
+  sourceName  String
+  category    NewsCategory
+  country     Country      @default(INDIA)
+  publishedAt DateTime
+  fetchedAt   DateTime     @default(now())
+  isActive    Boolean      @default(true)
+
+  @@index([category])
+  @@index([publishedAt])
+}
+
+// ─── ReadingProgress (Phase 5 - Continue Reading) ─────────────────────────────
+
+model ReadingProgress {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  blogId         String
+  blog           Blog     @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  scrollPercent  Int      @default(0)
+  lastReadAt     DateTime @default(now())
+  isCompleted    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, blogId])
+  @@index([userId])
+  @@index([lastReadAt])
+}
